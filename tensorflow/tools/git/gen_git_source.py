@@ -162,7 +162,7 @@ def generate(arglist):
           "Run ./configure again, branch was '%s' but is now '%s'" %
           (old_branch, new_branch))
     strs["tf_git_version"] = subprocess.check_output(
-        ["git", "-C", data["path"], "describe", "--long", "--dirty", "--tags"]).strip()
+        ["git","--git-dir", data["path"] + "/.git", "--work-tree", data["path"], "describe", "--long", "--dirty", "--tags"]).strip()
   # TODO(aselle): Check for escaping
   cpp_file = "\n".join("const char* %s() {return \"%s\";}" % (x, y)
                        for x, y in strs.items())

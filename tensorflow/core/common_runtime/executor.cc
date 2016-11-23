@@ -58,6 +58,8 @@ limitations under the License.
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/tensor_slice_reader_cache.h"
 
+#include "tensorflow/core/platform/default/tracing_context.h"
+
 namespace tensorflow {
 namespace {
 
@@ -1078,6 +1080,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     const int id = node->id();
     const NodeItem& item = nodes[id];
 
+    ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id);
+
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
     if (vlog_ && VLOG_IS_ON(1)) {
@@ -1197,6 +1201,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
             device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(),
                                                  accessed);
           }
+
+          ::tensorflow::internal::_tracing_context.RecordEnd(state->tagged_node.node->id(), state->params.step_id);
+
           bool completed = NodeDone(s, state->item.node, ready, stats, nullptr);
           delete state;
           if (completed) Finish();
@@ -1256,6 +1263,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       if (stats_collector_) {
         scheduled_usec = nodestats::NowInUsec();
       }
+      ::tensorflow::internal::_tracing_context.RecordEnd(id, params.step_id);
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
     }
