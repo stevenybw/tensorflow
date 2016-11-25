@@ -1241,7 +1241,11 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     const int id = node->id();
     const NodeItem& item = nodes[id];
 
-    ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id);
+    std::vector<int> in_node_id_list;
+    for(Node* n : node->in_nodes()) {
+      in_node_id_list.push_back(n->id());
+    }
+    ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, in_node_id_list);
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
