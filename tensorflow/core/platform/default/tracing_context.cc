@@ -39,11 +39,15 @@ TracingContext::TracingContext() {
   _program_start_time = currentTimeMillisecond();
 }
 
-void TracingContext::RecordBegin(int node_id, int64_t step_id) {
+void TracingContext::RecordBegin(int node_id, int64_t step_id, const std::vector<int>& in_node_id_list) {
   Lock l(_mu);
   if(_enabled) {
     double beginTime = currentTimeMillisecond() - _program_start_time;
-    _fp << TraceElement(OP_BEGIN, node_id, step_id, beginTime) << "\n";
+    _fp << TraceElement(OP_BEGIN, node_id, step_id, beginTime) << ",{ ";
+    for (int in_node_id : in_node_id_list) {
+      _fp << in_node_id << " ";
+    }
+    _fp << "}\n";
   }
 }
 

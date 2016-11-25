@@ -50,7 +50,15 @@ private:
 
 public:
   double _program_start_time;
-  void RecordBegin(int node_id, int64_t step_id);
+
+  /*
+   * params:
+   *
+   * node_id  id of the current node being traced
+   * step_id  current step id
+   * in_node_in_list  a list of the id of the dependency nodes
+   */
+  void RecordBegin(int node_id, int64_t step_id, const std::vector<int>& in_node_id_list);
   void RecordEnd(int node_id, int64_t step_id);
 
   TracingContext();
