@@ -39,23 +39,27 @@ TracingContext::TracingContext() {
   _program_start_time = currentTimeMillisecond();
 }
 
-void TracingContext::RecordBegin(int node_id, int64_t step_id, const std::vector<int>& in_node_id_list) {
+void TracingContext::RecordBegin(int node_id, int64_t step_id, const string& node_name,
+    const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list) {
   Lock l(_mu);
   if(_enabled) {
     double beginTime = currentTimeMillisecond() - _program_start_time;
-    _fp << TraceElement(OP_BEGIN, node_id, step_id, beginTime) << ",{ ";
-    for (int in_node_id : in_node_id_list) {
-      _fp << in_node_id << " ";
+    _fp << TraceElementType(OP_BEGIN) << "," << node_id << "," << step_id << "," << node_name << "," << type_string << "," << assigned_device_name << "," << beginTime << ",{ ";
+    for (TracingNode in_node_id : in_node_id_list) {
+      _fp << in_node_id._node_id << "!" << in_node_id._node_name << "!" << in_node_id._assigned_device_name << " ";
     }
     _fp << "}\n";
   }
 }
 
-void TracingContext::RecordEnd(int node_id, int64_t step_id) {
+/*
+ * assigned_device_name is needed even in RecordEnd, because node_id is not sufficient.
+ */
+void TracingContext::RecordEnd(int node_id, int64_t step_id, const string& assigned_device_name) {
   Lock l(_mu);
   if(_enabled) {
     double endTime = currentTimeMillisecond() - _program_start_time;
-    _fp << TraceElement(OP_END, node_id, step_id, endTime) << "\n";
+    _fp << TraceElementType(OP_END) << "," << node_id << "," << step_id << "," << assigned_device_name << "," << endTime << "\n";
   }
 }
 
