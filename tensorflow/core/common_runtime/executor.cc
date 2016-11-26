@@ -1241,11 +1241,11 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     const int id = node->id();
     const NodeItem& item = nodes[id];
 
-    std::vector<int> in_node_id_list;
+    std::vector<::tensorflow::internal::TracingNode> in_node_id_list;
     for(Node* n : node->in_nodes()) {
-      in_node_id_list.push_back(n->id());
+      in_node_id_list.push_back(::tensorflow::internal::TracingNode(n->id(), n->name(), n->assigned_device_name()));
     }
-    ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, in_node_id_list);
+    ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list);
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
@@ -1358,7 +1358,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
                                                  accessed);
           }
 
-          ::tensorflow::internal::_tracing_context.RecordEnd(state->tagged_node.node->id(), state->params.step_id);
+          ::tensorflow::internal::_tracing_context.RecordEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
 
           bool completed = NodeDone(s, state->item.node, ready, stats, nullptr);
           delete state;
@@ -1403,7 +1403,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       if (stats) {
         scheduled_usec = nodestats::NowInUsec();
       }
-      ::tensorflow::internal::_tracing_context.RecordEnd(id, params.step_id);
+      ::tensorflow::internal::_tracing_context.RecordEnd(id, params.step_id, node->assigned_device_name());
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
     }
