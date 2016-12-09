@@ -25,9 +25,10 @@ class SendOp : public OpKernel {
  public:
   explicit SendOp(OpKernelConstruction* ctx);
   void Compute(OpKernelContext* ctx) override;
+  string key_prefix_;
 
  private:
-  string key_prefix_;
+
 
   TF_DISALLOW_COPY_AND_ASSIGN(SendOp);
 };
@@ -36,9 +37,10 @@ class RecvOp : public AsyncOpKernel {
  public:
   explicit RecvOp(OpKernelConstruction* ctx);
   void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override;
+  string key_prefix_;
 
  private:
-  string key_prefix_;
+
 
   TF_DISALLOW_COPY_AND_ASSIGN(RecvOp);
 };

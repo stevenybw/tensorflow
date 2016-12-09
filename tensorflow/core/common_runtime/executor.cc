@@ -60,6 +60,7 @@ limitations under the License.
 #include "tensorflow/core/util/tensor_slice_reader_cache.h"
 
 #include "tensorflow/core/platform/default/tracing_context.h"
+#include "tensorflow/core/kernels/sendrecv_ops.h"
 
 namespace tensorflow {
 namespace {
@@ -1245,7 +1246,23 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     for(Node* n : node->in_nodes()) {
       in_node_id_list.push_back(::tensorflow::internal::TracingNode(n->id(), n->name(), n->assigned_device_name()));
     }
-    ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list);
+    if (node->IsSend()) {
+      SendOp* op = dynamic_cast<SendOp*>(item.kernel);
+      assert(op != NULL);
+      string full_key;
+      strings::StrAppend(&full_key, op->key_prefix_, ";", input_frame->frame_id, ":",
+                         input_iter);
+      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key);
+    } else if (node->IsRecv()) {
+      RecvOp* op = dynamic_cast<RecvOp*>(item.kernel);
+      assert(op != NULL);
+      string full_key;
+      strings::StrAppend(&full_key, op->key_prefix_, ";", input_frame->frame_id, ":",
+                         input_iter);
+      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key);
+    } else {
+      ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list);
+    }
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.

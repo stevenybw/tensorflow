@@ -25,6 +25,8 @@ char buffer[BUFFER_SIZE];
 
 TracingContext::TracingContext() {
   char* str;
+
+  // Set TF_TRACE_PATH to enable ybw tracing
   str = std::getenv("TF_TRACE_PATH");
   if(str == NULL) {
     LOG(INFO) << "TF_TRACE_PATH not set, default NULL";
@@ -52,9 +54,21 @@ void TracingContext::RecordBegin(int node_id, int64_t step_id, const string& nod
   }
 }
 
-/*
- * assigned_device_name is needed even in RecordEnd, because node_id is not sufficient.
- */
+void TracingContext::RecordSendRecvBegin(int node_id, int64_t step_id,
+    const string& node_name, const string& type_string,
+    const string& assigned_device_name,
+    const std::vector<TracingNode>& in_node_id_list, const string& full_key) {
+  Lock l(_mu);
+  if(_enabled) {
+    double beginTime = currentTimeMillisecond() - _program_start_time;
+    _fp << TraceElementType(OP_BEGIN) << "," << node_id << "," << step_id << "," << node_name << "," << type_string << "," << assigned_device_name << "," << beginTime << ",{ ";
+    for (TracingNode in_node_id : in_node_id_list) {
+      _fp << in_node_id._node_id << "!" << in_node_id._node_name << "!" << in_node_id._assigned_device_name << " ";
+    }
+    _fp << "}" << "," << full_key << "\n";
+  }
+}
+
 void TracingContext::RecordEnd(int node_id, int64_t step_id, const string& assigned_device_name) {
   Lock l(_mu);
   if(_enabled) {

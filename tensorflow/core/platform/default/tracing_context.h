@@ -70,9 +70,18 @@ public:
    *
    * node_id  id of the current node being traced
    * step_id  current step id
+   * node_name    name of the node being traced
+   * type_string  type of the node being traced
+   * assigned_device_name    device name that the node is assigned to
    * in_node_in_list  a list of the id of the dependency nodes
    */
   void RecordBegin(int node_id, int64_t step_id, const string& node_name, const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list);
+
+  /*
+   * An extra param, full_key is concerned compared to record for SendRecv operation.
+   * This information helps us connect _Send to corresponding _Recv when analyzing.
+   */
+  void RecordSendRecvBegin(int node_id, int64_t step_id, const string& node_name, const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list, const string& full_key);
   void RecordEnd(int node_id, int64_t step_id, const string& assigned_device_name);
 
   TracingContext();
