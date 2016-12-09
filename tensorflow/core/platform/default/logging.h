@@ -66,8 +66,10 @@ class LogMessageFatal : public LogMessage {
 
 #define LOG(severity) _TF_LOG_##severity
 
+int getLoggingVerbosity();
+
 // TODO(jeff): Define a proper implementation of VLOG_IS_ON
-#define VLOG_IS_ON(lvl) ((lvl) <= 0)
+#define VLOG_IS_ON(lvl) ((lvl) <= ::tensorflow::internal::getLoggingVerbosity())
 
 #define VLOG(lvl)      \
   if (VLOG_IS_ON(lvl)) \

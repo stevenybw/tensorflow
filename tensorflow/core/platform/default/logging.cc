@@ -27,6 +27,23 @@ limitations under the License.
 namespace tensorflow {
 namespace internal {
 
+int getLoggingVerbosity() {
+  static int _logging_verbosity = -1;
+  if (_logging_verbosity == -1) {
+    // Set TF_LOGGING_VERBOSITY to enable verbose logging
+    char *str;
+    str = std::getenv("TF_LOGGING_VERBOSITY");
+    if(str == NULL) {
+      _logging_verbosity = 0;
+      LOG(INFO) << "TF_LOGGING_VERBOSITY not set, default 0";
+    } else {
+      _logging_verbosity = atoi(str);
+      LOG(INFO) << "TF_LOGGING_VERBOSITY=" << _logging_verbosity;
+    }
+  }
+  return _logging_verbosity;
+}
+
 LogMessage::LogMessage(const char* fname, int line, int severity)
     : fname_(fname), line_(line), severity_(severity) {}
 
