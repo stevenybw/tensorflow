@@ -20,7 +20,7 @@ static double currentTimeMillisecond() {
   return 1e6 * tv.tv_sec + 1.0 * tv.tv_usec;
 }
 
-#define BUFFER_SIZE 8192
+#define BUFFER_SIZE (64 * 1024 * 1024)
 char buffer[BUFFER_SIZE];
 
 TracingContext::TracingContext() {
@@ -54,6 +54,14 @@ void TracingContext::RecordBegin(int node_id, int64_t step_id, const string& nod
   }
 }
 
+void TracingContext::RecordEnd(int node_id, int64_t step_id, const string& assigned_device_name) {
+  Lock l(_mu);
+  if(_enabled) {
+    double endTime = currentTimeMillisecond() - _program_start_time;
+    _fp << TraceElementType(OP_END) << "," << node_id << "," << step_id << "," << assigned_device_name << "," << endTime << "\n";
+  }
+}
+
 void TracingContext::RecordSendRecvBegin(int node_id, int64_t step_id,
     const string& node_name, const string& type_string,
     const string& assigned_device_name,
@@ -61,7 +69,7 @@ void TracingContext::RecordSendRecvBegin(int node_id, int64_t step_id,
   Lock l(_mu);
   if(_enabled) {
     double beginTime = currentTimeMillisecond() - _program_start_time;
-    _fp << TraceElementType(OP_BEGIN) << "," << node_id << "," << step_id << "," << node_name << "," << type_string << "," << assigned_device_name << "," << beginTime << ",{ ";
+    _fp << TraceElementType(OP_SENDRECV_BEGIN) << "," << node_id << "," << step_id << "," << node_name << "," << type_string << "," << assigned_device_name << "," << beginTime << ",{ ";
     for (TracingNode in_node_id : in_node_id_list) {
       _fp << in_node_id._node_id << "!" << in_node_id._node_name << "!" << in_node_id._assigned_device_name << " ";
     }
@@ -69,11 +77,12 @@ void TracingContext::RecordSendRecvBegin(int node_id, int64_t step_id,
   }
 }
 
-void TracingContext::RecordEnd(int node_id, int64_t step_id, const string& assigned_device_name) {
+void TracingContext::RecordSendRecvEnd(int node_id, int64_t step_id,
+    const string& assigned_device_name) {
   Lock l(_mu);
   if(_enabled) {
     double endTime = currentTimeMillisecond() - _program_start_time;
-    _fp << TraceElementType(OP_END) << "," << node_id << "," << step_id << "," << assigned_device_name << "," << endTime << "\n";
+    _fp << TraceElementType(OP_SENDRECV_END) << "," << node_id << "," << step_id << "," << assigned_device_name << "," << endTime << "\n";
   }
 }
 

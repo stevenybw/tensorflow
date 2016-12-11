@@ -1085,6 +1085,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     for(Node* n : node->in_nodes()) {
       in_node_id_list.push_back(::tensorflow::internal::TracingNode(n->id(), n->name(), n->assigned_device_name()));
     }
+
     if (node->IsSend()) {
       SendOp* op = dynamic_cast<SendOp*>(item.kernel);
       assert(op != NULL);
@@ -1223,7 +1224,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
                                                  accessed);
           }
 
-          ::tensorflow::internal::_tracing_context.RecordEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
+          if (state->tagged_node.node->IsSend()) {
+            ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
+          } else if (state->tagged_node.node->IsRecv()) {
+            ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
+          } else {
+            ::tensorflow::internal::_tracing_context.RecordEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
+          }
 
           bool completed = NodeDone(s, state->item.node, ready, stats, nullptr);
           delete state;
@@ -1284,7 +1291,15 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       if (stats_collector_) {
         scheduled_usec = nodestats::NowInUsec();
       }
-      ::tensorflow::internal::_tracing_context.RecordEnd(id, params.step_id, node->assigned_device_name());
+
+      if (node->IsSend()) {
+        ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(id, params.step_id, node->assigned_device_name());
+      } else if (node->IsRecv()) {
+        ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(id, params.step_id, node->assigned_device_name());
+      } else {
+        ::tensorflow::internal::_tracing_context.RecordEnd(id, params.step_id, node->assigned_device_name());
+      }
+
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
     }
