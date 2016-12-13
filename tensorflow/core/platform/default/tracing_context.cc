@@ -42,7 +42,7 @@ TracingContext::TracingContext() {
 }
 
 void TracingContext::RecordBegin(int node_id, int64_t step_id, const string& node_name,
-    const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list) {
+    const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list, uintptr_t run_id) {
   Lock l(_mu);
   if(_enabled) {
     double beginTime = currentTimeMillisecond() - _program_start_time;
@@ -50,7 +50,7 @@ void TracingContext::RecordBegin(int node_id, int64_t step_id, const string& nod
     for (TracingNode in_node_id : in_node_id_list) {
       _fp << in_node_id._node_id << "!" << in_node_id._node_name << "!" << in_node_id._assigned_device_name << " ";
     }
-    _fp << "}\n";
+    _fp << "}" << "," << run_id << "\n";
   }
 }
 
@@ -63,9 +63,8 @@ void TracingContext::RecordEnd(int node_id, int64_t step_id, const string& assig
 }
 
 void TracingContext::RecordSendRecvBegin(int node_id, int64_t step_id,
-    const string& node_name, const string& type_string,
-    const string& assigned_device_name,
-    const std::vector<TracingNode>& in_node_id_list, const string& full_key) {
+    const string& node_name, const string& type_string, const string& assigned_device_name,
+    const std::vector<TracingNode>& in_node_id_list, const string& full_key, uintptr_t run_id) {
   Lock l(_mu);
   if(_enabled) {
     double beginTime = currentTimeMillisecond() - _program_start_time;
@@ -73,7 +72,7 @@ void TracingContext::RecordSendRecvBegin(int node_id, int64_t step_id,
     for (TracingNode in_node_id : in_node_id_list) {
       _fp << in_node_id._node_id << "!" << in_node_id._node_name << "!" << in_node_id._assigned_device_name << " ";
     }
-    _fp << "}" << "," << full_key << "\n";
+    _fp << "}" << "," << full_key << "," << run_id << "\n";
   }
 }
 
@@ -86,6 +85,18 @@ void TracingContext::RecordSendRecvEnd(int node_id, int64_t step_id,
   }
 }
 
+void TracingContext::RecordNewExecutorsAndKeys(uintptr_t run_id,
+    const std::vector<string>& target_nodes) {
+  Lock l(_mu);
+  if(_enabled) {
+    _fp << TraceElementType(OP_NEW_EXECUTORS_AND_KEYS) << "," << run_id << ",{ ";
+    for (string target_node : target_nodes) {
+      _fp << target_node << " ";
+    }
+    _fp << "}" << "\n";
+  }
+}
+
 TracingContext::~TracingContext() {
   // TODO Auto-generated destructor stub
 }
@@ -94,4 +105,3 @@ TracingContext _tracing_context;
 
 } /* namespace internal */
 } /* namespace tensorflow */
-

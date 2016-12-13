@@ -60,6 +60,8 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/gpu/gpu_tracer.h"
 #endif  // GOOGLE_CUDA
 
+#include "tensorflow/core/platform/default/tracing_context.h"
+
 namespace tensorflow {
 
 namespace {
@@ -427,6 +429,7 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   Executor::Args args;
   args.step_id = step_id_counter_.fetch_add(1);
+  args.run_id = (uintptr_t) executors_and_keys;
   args.rendezvous = run_state.rendez;
   args.cancellation_manager = &step_cancellation_manager;
   args.runner = [this, pool](Executor::Args::Closure c) {
@@ -908,6 +911,8 @@ Status DirectSession::GetOrCreateExecutors(
   options.target_nodes = tn_sorted;
 
   std::unique_ptr<ExecutorsAndKeys> ek(new ExecutorsAndKeys);
+
+  ::tensorflow::internal::_tracing_context.RecordNewExecutorsAndKeys((uintptr_t) ek.get(), tn_sorted);
 
   // The executor_lock_ is intentionally released while executor is
   // being created.

@@ -872,6 +872,7 @@ class ExecutorState {
   const bool log_memory_;
 
   int64 step_id_;
+  uintptr_t run_id_;
   // Not owned.
   Rendezvous* rendezvous_;
   SessionState* session_state_;
@@ -991,6 +992,7 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
     : vlog_(VLOG_IS_ON(1)),
       log_memory_(LogMemory::IsEnabled()),
       step_id_(args.step_id),
+      run_id_(args.run_id),
       rendezvous_(args.rendezvous),
       session_state_(args.session_state),
       tensor_store_(args.tensor_store),
@@ -1253,16 +1255,16 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       string full_key;
       strings::StrAppend(&full_key, op->key_prefix_, ";", input_frame->frame_id, ":",
                          input_iter);
-      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key);
+      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key, this->run_id_);
     } else if (node->IsRecv()) {
       RecvOp* op = dynamic_cast<RecvOp*>(item.kernel);
       assert(op != NULL);
       string full_key;
       strings::StrAppend(&full_key, op->key_prefix_, ";", input_frame->frame_id, ":",
                          input_iter);
-      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key);
+      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key, this->run_id_);
     } else {
-      ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list);
+      ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, this->run_id_);
     }
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
