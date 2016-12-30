@@ -34,6 +34,8 @@ limitations under the License.
 #include "tensorflow/core/lib/gtl/map_util.h"
 #include "tensorflow/core/platform/macros.h"
 
+#include "tensorflow/core/platform/default/tracing_context.h"
+
 // See core/kernels/function_ops.cc for related kernels.
 
 namespace tensorflow {
@@ -486,9 +488,13 @@ Status FunctionLibraryRuntimeImpl::CreateItem(Handle handle, Item** item) {
     return Status::OK();
   }
 
+  using namespace ::tensorflow::internal;
   // Creates an executor based on the g.  This must be done without
   // holding mu_ because create_kernel_ calls back into the library.
   LocalExecutorParams params;
+  params.task_id = _tracing_context.nextTaskId();
+  params.partition_id = handle;
+  params.partition_name = "FunctionLibraryRuntime";
   params.device = device_;
   params.function_library = this;
   params.create_kernel = create_kernel_;
@@ -1209,3 +1215,4 @@ FunctionBody* SymbolicGradient(const FunctionBody& f) {
 }
 
 }  // end namespace tensorflow
+

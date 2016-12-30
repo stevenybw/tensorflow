@@ -30,6 +30,8 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/public/session_options.h"
 
+#include "tensorflow/core/platform/default/tracing_context.h"
+
 namespace tensorflow {
 
 namespace {
@@ -149,6 +151,11 @@ Status GraphRunner::Run(Graph* graph, FunctionLibraryRuntime* function_library,
     return CreateNonCachedKernel(device.get(), nullptr, ndef,
                                  g->versions().producer(), kernel);
   };
+  static std::atomic_int_fast64_t num_partition_here(0);
+  using namespace ::tensorflow::internal;
+  params.task_id = _tracing_context.nextTaskId();
+  params.partition_name = "GraphRunner";
+  params.partition_id = num_partition_here.fetch_add(1);
   params.delete_kernel = [](OpKernel* kernel) { delete kernel; };
 
   Executor* executor;
@@ -181,3 +188,4 @@ Status GraphRunner::Run(Graph* graph, FunctionLibraryRuntime* function_library,
 }
 
 }  // namespace tensorflow
+

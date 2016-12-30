@@ -45,6 +45,11 @@ class StepStatsCollector;
 // Multiple threads can call Executor::Run concurrently.
 class Executor {
  public:
+  // The Partition Name that the executor belongs with
+  int64_t task_id;
+  string partition_name;
+  int64_t partition_id;
+
   virtual ~Executor() {}
 
   // RunAsync() executes the graph computation. "done" is run when the
@@ -100,7 +105,6 @@ class Executor {
                                  OpKernelContext* ctx)>
         NodeOutputsCallback;
     NodeOutputsCallback node_outputs_cb = nullptr;
-    uintptr_t run_id = 0;
   };
   typedef std::function<void(const Status&)> DoneCallback;
   virtual void RunAsync(const Args& args, DoneCallback done) = 0;
@@ -127,6 +131,11 @@ class Executor {
 // "params" provides a set of context for the executor. We expect that
 // different context would provide different implementations.
 struct LocalExecutorParams {
+  // (task_id, partition_id) identifies the executor
+  int64_t task_id;
+  string partition_name;
+  int64_t partition_id;
+
   Device* device;
 
   // The library runtime support.

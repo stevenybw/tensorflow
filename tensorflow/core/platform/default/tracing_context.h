@@ -13,62 +13,49 @@
 #include <string>
 #include <mutex>
 #include <vector>
+#include <atomic>
 
 using std::string;
 
 namespace tensorflow {
 namespace internal {
 
+const string SEP = " ";
 
-enum TraceElementType {OP_BEGIN=1, OP_END, OP_SENDRECV_BEGIN, OP_SENDRECV_END, OP_NEW_EXECUTORS_AND_KEYS};
-
-/*
- * TracingNode contains all the information sufficient to identify a specific node.
- */
-struct TracingNode {
-  int _node_id;
-  string _node_name;
-  string _assigned_device_name;
-  TracingNode(int node_id, string node_name, string assigned_device_name) :
-    _node_id(node_id), _node_name(node_name), _assigned_device_name(assigned_device_name) {}
-};
+extern std::atomic_int_fast64_t _num_tasks;
+enum MetaEventType { META_NEW_TASK=1, META_NEW_PARTITION, META_NEW_NODE, META_ASSIGN_NODE_CHILDREN };
+enum TraceEventType { TRACE_SCHEDULER_BEGIN=1, TRACE_SCHEDULER_END, TRACE_COMPUTE_BEGIN, TRACE_COMPUTE_END,
+  TRACE_SCHEDULER_BEGIN_WITH_ITER, TRACE_SCHEDULER_END_WITH_ITER, TRACE_COMPUTE_BEGIN_WITH_ITER, TRACE_COMPUTE_END_WITH_ITER};
 
 class TracingContext {
 private:
-  typedef std::lock_guard<std::mutex>  Lock;
-
-  std::mutex _mu;
+  std::atomic_int_fast64_t _num_tasks;
   string _trace_path;
-  std::ofstream _fp;
   bool _enabled = false;
+
+  void init_thread_if_necessary();
 
 public:
   double _program_start_time;
+  bool Enabled();
 
-  /*
-   * params:
-   *
-   * node_id  id of the current node being traced
-   * step_id  current step id
-   * node_name    name of the node being traced
-   * type_string  type of the node being traced
-   * assigned_device_name    device name that the node is assigned to
-   * in_node_in_list  a list of the id of the dependency nodes
-   */
-  void RecordBegin(int node_id, int64_t step_id, const string& node_name, const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list, uintptr_t run_id);
-  void RecordEnd(int node_id, int64_t step_id, const string& assigned_device_name);
+
+  // Here we don't care about the specific information because (task_id, partition_id) can identify a graph,
+  // and all the information about each node should be stored into that.
+  void RecordSchedulerBegin(int64_t task_id, int64_t step_id, int64_t partition_id, int node_id, uint64_t frame_id, int64_t input_iter);
+  void RecordSchedulerEnd(int64_t task_id, int64_t step_id, int64_t partition_id, int node_id, uint64_t frame_id, int64_t input_iter);
+  void RecordComputeBegin(int64_t task_id, int64_t step_id, int64_t partition_id, int node_id, uint64_t frame_id, int64_t input_iter, bool async);
+  void RecordComputeEnd(int64_t task_id, int64_t step_id, int64_t partition_id, int node_id, uint64_t frame_id, int64_t input_iter, bool async);
+
+  std::ostream& MetaStream();
+  int64_t nextTaskId();
 
   /*
    * An extra param, full_key is concerned compared to record for SendRecv operation.
    * This information helps us connect _Send to corresponding _Recv when analyzing.
    */
-  void RecordSendRecvBegin(int node_id, int64_t step_id, const string& node_name, const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list, const string& full_key, uintptr_t run_id);
-  void RecordSendRecvEnd(int node_id, int64_t step_id, const string& assigned_device_name);
-
-  /*
-   * Record the run_id and its corresponding target_nodes names.
-   */
-  void RecordNewExecutorsAndKeys(uintptr_t run_id, const std::vector<string>& target_nodes);
+  //void RecordSendRecvBegin(int node_id, int64_t step_id, const string& node_name, const string& type_string, const string& assigned_device_name, const std::vector<TracingNode>& in_node_id_list, const string& full_key, uintptr_t run_id);
+  //void RecordSendRecvEnd(int node_id, int64_t step_id, const string& assigned_device_name);
 
   TracingContext();
   virtual ~TracingContext();

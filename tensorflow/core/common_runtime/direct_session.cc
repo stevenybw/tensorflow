@@ -429,7 +429,6 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   Executor::Args args;
   args.step_id = step_id_counter_.fetch_add(1);
-  args.run_id = (uintptr_t) executors_and_keys;
   args.rendezvous = run_state.rendez;
   args.cancellation_manager = &step_cancellation_manager;
   args.runner = [this, pool](Executor::Args::Closure c) {
@@ -912,8 +911,6 @@ Status DirectSession::GetOrCreateExecutors(
 
   std::unique_ptr<ExecutorsAndKeys> ek(new ExecutorsAndKeys);
 
-  ::tensorflow::internal::_tracing_context.RecordNewExecutorsAndKeys((uintptr_t) ek.get(), tn_sorted);
-
   // The executor_lock_ is intentionally released while executor is
   // being created.
   std::unordered_map<string, std::unique_ptr<Graph>> graphs;
@@ -941,6 +938,17 @@ Status DirectSession::GetOrCreateExecutors(
   const auto& optimizer_opts =
       options_.config.graph_options().optimizer_options();
   GraphOptimizer optimizer(optimizer_opts);
+
+  using namespace ::tensorflow::internal;
+  int64_t task_id = _tracing_context.nextTaskId();
+  int64_t partition_id = 0;
+  int64_t num_partitions = graphs.size();
+
+  if (_tracing_context.Enabled()) {
+    std::ostream& out = _tracing_context.MetaStream();
+    out << MetaEventType::META_NEW_TASK << SEP << task_id << SEP << num_partitions << SEP << key << "\n";
+  }
+
   for (auto iter = graphs.begin(); iter != graphs.end(); ++iter) {
     const string& partition_name = iter->first;
     Graph* partition_graph = iter->second.get();
@@ -1001,6 +1009,10 @@ Status DirectSession::GetOrCreateExecutors(
     item->graph = partition_graph;
     item->executor = nullptr;
     Executor* executor;
+    params.task_id = task_id;
+    params.partition_name = partition_name;
+    params.partition_id = partition_id++;
+
     TF_RETURN_IF_ERROR(
         NewLocalExecutor(params, iter->second.release(), &executor));
     item->executor.reset(executor);

@@ -411,6 +411,42 @@ Status ExecutorImpl::Initialize() {
   // Initialize PendingCounts only after frame_local_ids_ is initialized.
   InitializePending(graph_, cf_info);
 
+  using namespace ::tensorflow::internal;
+  this->task_id = params_.task_id;
+  this->partition_name = params_.partition_name;
+  this->partition_id = params_.partition_id;
+
+  if (_tracing_context.Enabled()) {
+    std::ostream& out = _tracing_context.MetaStream();
+    out << MetaEventType::META_NEW_PARTITION << SEP << task_id << SEP << partition_id << SEP << partition_name << "\n";
+    // Trace required information
+    for (const Node* n : graph_->nodes()) {
+      int id = n->id();
+      NodeItem* item = &(nodes_[id]);
+      const string name = n->name();
+      const string type = n->type_string();
+      const string device = n->assigned_device_name();
+      // To fully identify a key, (frame_id, input_iter), which is unknonw here, is necessary.
+      string key_prefix = "E";
+      if (n->IsSend()) {
+        SendOp* op = dynamic_cast<SendOp*>(item->kernel);
+        assert(op != NULL);
+        key_prefix = op->key_prefix_;
+      } else if (n->IsRecv()) {
+        RecvOp* op = dynamic_cast<RecvOp*>(item->kernel);
+        assert(op != NULL);
+        key_prefix = op->key_prefix_;
+      }
+      out << MetaEventType::META_NEW_NODE << SEP << task_id << SEP << partition_id << SEP
+          << id << SEP << name << SEP << type << SEP << device << SEP << key_prefix << "\n";
+      out << MetaEventType::META_ASSIGN_NODE_CHILDREN;
+      for(const Node* v : n->out_nodes()) {
+        out << SEP << v->id();
+      }
+      out << "\n";
+    }
+  }
+
   return SetAllocAttrs();
 }
 
@@ -992,7 +1028,6 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
     : vlog_(VLOG_IS_ON(1)),
       log_memory_(LogMemory::IsEnabled()),
       step_id_(args.step_id),
-      run_id_(args.run_id),
       rendezvous_(args.rendezvous),
       session_state_(args.session_state),
       tensor_store_(args.tensor_store),
@@ -1201,6 +1236,8 @@ struct ExecutorState::AsyncState {
 };
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
+  using namespace ::tensorflow::internal;
+
   const NodeItem* nodes = impl_->nodes_;
   TaggedNodeSeq ready;
   TaggedNodeReadyQueue inline_ready;
@@ -1235,6 +1272,10 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
   EntryVector outputs;
   bool completed = false;
   inline_ready.push_back(tagged_node);
+
+  const int current_scheduled_id = tagged_node.node->id();
+  _tracing_context.RecordSchedulerBegin(impl_->task_id, step_id_, impl_->partition_id, current_scheduled_id, tagged_node.input_frame->frame_id, tagged_node.input_iter);
+
   while (!inline_ready.empty()) {
     tagged_node = inline_ready.front();
     inline_ready.pop_front();
@@ -1243,29 +1284,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     int64 input_iter = tagged_node.input_iter;
     const int id = node->id();
     const NodeItem& item = nodes[id];
-
-    std::vector<::tensorflow::internal::TracingNode> in_node_id_list;
-    for(Node* n : node->in_nodes()) {
-      in_node_id_list.push_back(::tensorflow::internal::TracingNode(n->id(), n->name(), n->assigned_device_name()));
-    }
-
-    if (node->IsSend()) {
-      SendOp* op = dynamic_cast<SendOp*>(item.kernel);
-      assert(op != NULL);
-      string full_key;
-      strings::StrAppend(&full_key, op->key_prefix_, ";", input_frame->frame_id, ":",
-                         input_iter);
-      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key, this->run_id_);
-    } else if (node->IsRecv()) {
-      RecvOp* op = dynamic_cast<RecvOp*>(item.kernel);
-      assert(op != NULL);
-      string full_key;
-      strings::StrAppend(&full_key, op->key_prefix_, ";", input_frame->frame_id, ":",
-                         input_iter);
-      ::tensorflow::internal::_tracing_context.RecordSendRecvBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, full_key, this->run_id_);
-    } else {
-      ::tensorflow::internal::_tracing_context.RecordBegin(id, params.step_id, node->name(), node->type_string(), node->assigned_device_name(), in_node_id_list, this->run_id_);
-    }
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
@@ -1346,10 +1364,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
           NodeExecStats* stats = state->stats;      // Shorthand
           Entry* first_input = state->first_input;  // Shorthand
 
+          _tracing_context.RecordComputeEnd(impl_->task_id, step_id_, impl_->partition_id, state->item.node->id(), state->tagged_node.input_frame->frame_id, state->tagged_node.input_iter, true);
+
           if (vlog_) {
             VLOG(2) << this << " Async kernel done: "
                     << SummarizeNodeDef(state->item.node->def());
           }
+
           if (stats) nodestats::SetOpEnd(stats);
           EntryVector outputs;
           Status s = ProcessOutputs(state->item, &state->ctx, &outputs, stats);
@@ -1378,25 +1399,22 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
                                                  accessed);
           }
 
-          if (state->tagged_node.node->IsSend()) {
-            ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
-          } else if (state->tagged_node.node->IsRecv()) {
-            ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
-          } else {
-            ::tensorflow::internal::_tracing_context.RecordEnd(state->tagged_node.node->id(), state->params.step_id, state->tagged_node.node->assigned_device_name());
-          }
-
           bool completed = NodeDone(s, state->item.node, ready, stats, nullptr);
           delete state;
           if (completed) Finish();
         };
         if (stats) nodestats::SetOpStart(stats);
+        _tracing_context.RecordComputeBegin(impl_->task_id, step_id_, impl_->partition_id, id, input_frame->frame_id, input_iter, true);
         device->ComputeAsync(async, &state->ctx, done);
       } else {
         // Synchronous computes.
         OpKernelContext ctx(&params, item.num_outputs);
         if (stats) nodestats::SetOpStart(stats);
+
+        _tracing_context.RecordComputeBegin(impl_->task_id, step_id_, impl_->partition_id, id, input_frame->frame_id, input_iter, false);
         device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
+        _tracing_context.RecordComputeEnd(impl_->task_id, step_id_, impl_->partition_id, id, input_frame->frame_id, input_iter, false);
+
         if (stats) nodestats::SetOpEnd(stats);
 
         s = ProcessOutputs(item, &ctx, &outputs, stats);
@@ -1430,14 +1448,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         scheduled_usec = nodestats::NowInUsec();
       }
 
-      if (node->IsSend()) {
-        ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(id, params.step_id, node->assigned_device_name());
-      } else if (node->IsRecv()) {
-        ::tensorflow::internal::_tracing_context.RecordSendRecvEnd(id, params.step_id, node->assigned_device_name());
-      } else {
-        ::tensorflow::internal::_tracing_context.RecordEnd(id, params.step_id, node->assigned_device_name());
-      }
-
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
     }
@@ -1445,6 +1455,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
   // This thread of computation is done if completed = true.
   if (completed) Finish();
+  _tracing_context.RecordSchedulerEnd(impl_->task_id, step_id_, impl_->partition_id, current_scheduled_id, tagged_node.input_frame->frame_id, tagged_node.input_iter);
 }
 
 Status ExecutorState::PrepareInputs(const NodeItem& item, Entry* first_input,
